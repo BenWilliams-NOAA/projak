@@ -360,13 +360,13 @@ run_projections <- function(report, future_catch = NULL,
     catch_vec_author[3] <- s1_catch[3] * yield_ratio
     # (Optional: extend further ...)
   }
-  tidytable(scenario = 1:7) %>%
+  tidytable::tidytable(scenario = 1:7) %>%
     tidytable::mutate(res =  tidytable::map(scenario, function(scen) {
 
       fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_standard
 
       tidytable::tidytable(sim_id = 1:n_sims) %>%
-        mutate(projection_output = tidytable::map(sim_id, function(id) {
+        tidytable::mutate(projection_output = tidytable::map(sim_id, function(id) {
 
           n_curr = n_start
           chi_curr = 0
