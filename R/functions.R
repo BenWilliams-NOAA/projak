@@ -48,20 +48,20 @@ get_recruitment <- function(ssb, b0, h, r0, r_mean = NULL, h_mean = NULL,
                             rho = 0, sigma_r = 0.5,
                             epsilon_prev = 0, rec_dev = rnorm(1)) {
 
-  # --- NEW OPTION: ADMB INVERSE GAUSSIAN ---
+  # inverse gaussian to be like ADMB
   if (type == "IG") {
     if(is.null(r_mean) || is.null(h_mean)) {
       stop("Must provide r_mean and h_mean for Inverse-Gaussian.")
     }
 
-    # Generate 1 deviate using the exact ADMB algorithm
-    # Note: We do not use rho or sigma_r here, as ADMB Rec_Gen=1 doesn't.
+    # generate deviate using the exact ADMB algorithm
+    # note: do not use rho or sigma_r here, as ADMB Rec_Gen=1 doesn't.
     rec_val = inverse_gaussian(1, r_mean, h_mean)
 
     return(list(rec = rec_val, chi = 0)) # No chi/epsilon tracking needed
   }
 
-  # --- STANDARD LOGNORMAL LOGIC (Existing Code) ---
+  # lognormal
   rec_exp = 0
   if (type == "Mean") {
     rec_exp = r_mean
@@ -73,7 +73,7 @@ get_recruitment <- function(ssb, b0, h, r0, r_mean = NULL, h_mean = NULL,
     rec_exp = (ssb / b0) * r0 * exp(h * (1 - ssb / b0))
   }
 
-  # Correlated Log-Normal Error
+  # correlated log-normal error
   chi = rho * epsilon_prev + sqrt(1 - rho^2) * rec_dev * sigma_r
   rec_out = rec_exp * exp(chi - (sigma_r^2)/2)
 
@@ -106,7 +106,7 @@ get_tier_f <- function(ssb, f_ref, b_ref, alpha = 0.05, ssl_protection = FALSE) 
       f_out = f_ref
     }
   } else {
-    # Standard Amendment 56
+    # standard Amendment 56
     if (ssb < alpha * b_ref) {
       f_out = 0
     } else if (ssb >= alpha * b_ref & ssb < b_ref) {
@@ -172,7 +172,7 @@ project_step <- function(n_at_age, m_at_age, sel_at_age,
   # ages 2 to max-1
   n_next[2:(ages-1)] <- n_at_age[1:(ages-2)] * S_t[1:(ages-2)]
 
-  # plus group (accumulates survivors from last age AND previous age)
+  # plus group (accumulates survivors from last age and previous age)
   n_next[ages] <- (n_at_age[ages-1] * S_t[ages-1]) + (n_at_age[ages] * S_t[ages])
 
   # recruitment (age 1)
@@ -265,6 +265,9 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #'
 #' @param report The RTMB report object
 #' @param future_catch vector of catches (e.g., c("2024" = 1170, "2025" = 1968))
+#' @param yield_ratio A numeric value (e.g., 0.3598).
+#'        If provided, Scenario 2 (Author F) catches for years 2 & 3 will be calculated as:
+#'        Scenario 1 Catch * yield_ratio.
 #' @param n_sims number of simulations
 #' @param n_years number of projection years
 #' @param unit_conversion Scaling factor to align Biomass units with Catch units.
@@ -275,7 +278,8 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #'                  "Ricker", or "BH" (Beverton-Holt).
 #' @param sigma_r_override optional numeric to override report$sigmaR.
 #' @export
-run_projections <- function(report, future_catch = NULL, n_sims = 1000,
+run_projections <- function(report, future_catch = NULL,
+                            yield_ratio = NULL, n_sims = 1000,
                             n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
                             rec_model = "IG", sigma_r_override = NULL) {
 
@@ -297,23 +301,33 @@ run_projections <- function(report, future_catch = NULL, n_sims = 1000,
   h_mean = 1 / mean(1 / hist_rec_val, na.rm = TRUE) # harmonic mean
 
   b0_val = if(!is.null(report$B0)) report$B0 else NA
-  r0_val <- exp(report$log_mean_R)
-  h_val  <- if(!is.null(report$steepness)) report$steepness else 1.0
-  sig_r_val <- if(!is.null(sigma_r_override)) sigma_r_override else report$sigmaR
-  rho_val   <- if(!is.null(report$rho)) report$rho else 0
+  r0_val = exp(report$log_mean_R)
+  h_val  = if(!is.null(report$steepness)){
+    report$steepness
+  } else{
+      1.0
+    }
+  sig_r_val = if(!is.null(sigma_r_override)) {sigma_r_override
+  } else{
+      report$sigmaR
+    }
+  rho_val   = if(!is.null(report$rho)){ report$rho
+  } else{
+      0
+    }
 
   rec_params <- list(
     rec_type = rec_model,
     # Stats for Mean/IG
-    r_mean   = a_mean,
-    h_mean   = h_mean,
+    r_mean = a_mean,
+    h_mean = h_mean,
     # Curve Params for Ricker/BH
-    b0       = b0_val,
-    r0       = r0_val,
-    h        = h_val,
+    b0 = b0_val,
+    r0 = r0_val,
+    h = h_val,
     # Error
-    sigma_r  = sig_r_val,
-    rho      = rho_val
+    sigma_r = sig_r_val,
+    rho = rho_val
   )
 
   if (rec_model %in% c("Ricker", "BH") && (is.na(b0_val) || is.na(r0_val))) {
@@ -322,7 +336,7 @@ run_projections <- function(report, future_catch = NULL, n_sims = 1000,
 
   # catch
   # Scenario 2 gets the full custom vector
-  # others get only the first year (Current Year)
+  # others get only the first year (current yYear)
   catch_vec_author <- rep(NA, n_years)
   if (!is.null(future_catch)) {
     len = min(length(future_catch), n_years)
@@ -333,8 +347,21 @@ run_projections <- function(report, future_catch = NULL, n_sims = 1000,
   if (!is.null(future_catch)) catch_vec_standard[1] = future_catch[1]
 
   # scenarios
+
+  if (!is.null(yield_ratio)) {
+    # get mean catch from Scenario 1 for years 2 and 3
+    s1_catch = scen1_res %>%
+      summarize(mean_c = mean(catch), .by = year) %>%
+      pull(mean_c)
+
+    # apply ratio: Author Catch = Max Catch * Ratio
+    # Year 1 is fixed, Years 2 & 3 are calculated
+    catch_vec_author[2] <- s1_catch[2] * yield_ratio
+    catch_vec_author[3] <- s1_catch[3] * yield_ratio
+    # (Optional: extend further ...)
+  }
   tidytable(scenario = 1:7) %>%
-    mutate(res = map(scenario, function(scen) {
+    tidytable::mutate(res =  tidytable::map(scenario, function(scen) {
 
       fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_standard
 
@@ -395,8 +422,6 @@ run_projections <- function(report, future_catch = NULL, n_sims = 1000,
 }
 
 
-
-
 #' Format Projection Results (Dynamic Variable)
 #'
 #' @param projection_data The raw output from run_projections()
@@ -404,8 +429,7 @@ run_projections <- function(report, future_catch = NULL, n_sims = 1000,
 #' @return A tidytable matching the ADMB csv format
 #' @export
 format_output <- function(projection_data, var = "ssb") {
-  scen_map <- data.table::data.table(
-    scenario = 1:7,
+  scen_map = data.table::data.table(scenario = 1:7,
     name = c("maxf", "authf", "half_maxf", "avg5f", "nof", "overf", "appoverf")
   )
   projection_data %>%
@@ -413,7 +437,7 @@ format_output <- function(projection_data, var = "ssb") {
     tidytable::summarise(mean_val = mean(.data[[var]]), .by = c(year, name)) %>%
     tidytable::pivot_wider(names_from = name, values_from = mean_val) %>%
     tidytable::select(year, maxf, authf, half_maxf, avg5f, nof, overf, appoverf) %>%
-    tidytable::mutate(across(-year, ~ if(var == "f") round(.x, 4) else round(.x, 1)))
+    tidytable::mutate(tidytable::across(-year, ~ if(var == "f") round(.x, 4) else round(.x, 1)))
 }
 
 

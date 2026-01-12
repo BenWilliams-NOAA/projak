@@ -7,6 +7,7 @@
 run_projections(
   report,
   future_catch = NULL,
+  yield_ratio = NULL,
   n_sims = 1000,
   n_years = 14,
   unit_conversion = 1,
@@ -19,6 +20,10 @@ run_projections(
 \item{report}{The RTMB report object}
 
 \item{future_catch}{vector of catches (e.g., c("2024" = 1170, "2025" = 1968))}
+
+\item{yield_ratio}{A numeric value (e.g., 0.3598).
+If provided, Scenario 2 (Author F) catches for years 2 & 3 will be calculated as:
+Scenario 1 Catch * yield_ratio.}
 
 \item{n_sims}{number of simulations}
 
