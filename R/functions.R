@@ -446,4 +446,29 @@ apply_tac <- function(abc, tacpar, total_oy_cap = 1945) {
 }
 
 
+# possible setup for adjusting
+run_projections <- function(report,
+                            future_catch = NULL,
+                            yield_ratio = NULL,
+                            tacpar = NULL,  # Add this here
+                            ...) {
+
+ #...
+
+  for(scen in run_order) {
+
+    if (scen == 2 && !is.null(tac_params)) {
+
+      # 1. get current Max ABC catch for all species in the complex
+      # assumes you are projecting the whole complex at once
+      # abc_current <- [Calculated Catch at F40]
+
+      # apply the fitted TAC logic
+      # catch_vec_author <- apply_tac(abc_current, tac_params)
+    }
+
+    # more code...
+  }
+}
+
 
