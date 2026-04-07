@@ -27,9 +27,34 @@ This is a basic example which shows you how to solve a common problem:
 ``` r
 library(projak)
 # pull in results from a RTMB assessment
-rpt = projak::m22.1 # 2024 goa northern rockfish assessment results
-result = run_projections(rpt, future_catch = c("2024" = 1170.036, "2025" = 1685, "2026" = 1565))
+rpt = projak::m22.1 # 2024 goa northern rockfish assessment results - 2024 catch data was incomplete
+result = run_projections(rpt, future_catch = c("2024" = 1170.036), yield_ratio = rpt$yield_ratio)
 format_output(result, var = "catch")
 format_output(result, var = "f")
 format_output(result, var = "ssb")
+```
+
+Alternatively, any model could be made to work with this by simply
+grabbing the outputs and placing them in a named list.
+
+``` r
+rpt <- list(
+  years = 1977:2024,
+  ages = list(2),
+  Nat = my_abundance_matrix, 
+  M = 0.06,
+  waa = c(0.1, 0.5, 0.8, ...),
+  maa = c(0.0, 0.01, 0.1, ...),
+  slx = my_selectivity_matrix,
+  spawn_fract = 0.25,
+  recruits = my_historical_rec_vector,
+  log_mean_R = 1.5,
+  sigmaR = 0.5,
+  F40 = 0.08,
+  B40 = 25000,
+  F35 = 0.10,
+  B35 = 21000,
+  Ft = my_historical_f_vector,
+  yield_ratio = 0.94
+)
 ```

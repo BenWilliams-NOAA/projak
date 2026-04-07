@@ -2,7 +2,7 @@
 % Please edit documentation in R/functions.R
 \name{inverse_gaussian}
 \alias{inverse_gaussian}
-\title{Inverse Gaussian Random Variable (ADMB style)}
+\title{Inverse Gaussian random variable (ADMB style)}
 \usage{
 inverse_gaussian(n, arithmetic_mean, harmonic_mean)
 }
@@ -17,5 +17,5 @@ inverse_gaussian(n, arithmetic_mean, harmonic_mean)
 vector of recruitment deviates
 }
 \description{
-Inverse Gaussian Random Variable (ADMB style)
+Inverse Gaussian random variable (ADMB style)
 }

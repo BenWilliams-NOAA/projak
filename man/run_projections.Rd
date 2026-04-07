@@ -13,7 +13,8 @@ run_projections(
   unit_conversion = 1,
   sex_ratio = 0.5,
   rec_model = "IG",
-  sigma_r_override = NULL
+  sigma_r_override = NULL,
+  scenarios = 1:7
 )
 }
 \arguments{
@@ -39,6 +40,8 @@ Scenario 1 Catch * yield_ratio.}
 "Ricker", or "BH" (Beverton-Holt).}
 
 \item{sigma_r_override}{optional numeric to override report$sigmaR.}
+
+\item{scenarios}{the NPFMC scenarios to run (1:7)}
 }
 \description{
 Run NPFMC Scenarios 1-7
