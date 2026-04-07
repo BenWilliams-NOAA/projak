@@ -185,7 +185,7 @@ project_step <- function(n_at_age, m_at_age, sel_at_age,
     # arguments for mean recruitment
     r_mean = rec_params$r_mean,   # historical average (required if type="Mean")
     h_mean = rec_params$h_mean,
-    type  = rec_params$rec_type, # "Mean", "BH", or "Ricker"
+    type  = rec_params$rec_type, # "mean", "BH", or "Ricker"
     # error structure
     rho = rec_params$rho,
     sigma_r = rec_params$sigma_r,
@@ -221,37 +221,37 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
   #    otherwise fall back to the report's terminal F.
   last_F = if(!is.null(current_F_sys)) current_F_sys else report$Ft[term_idx]
 
-  # 3. calculate average (includes the new F for last year)
+  # calculate average (includes the new F for last year)
   F_avg = mean(c(hist_Fs, last_F))
 
   f_out = 0
 
   if (scenario == 1) {
-    # Alt 1: Max ABC (F40)
+    # alt 1: Max ABC (F40)
     f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
 
   } else if (scenario == 2) {
-    # Alt 2: Author ABC (Defaults to F40)
+    # alt 2: Author ABC (Defaults to F40)
     f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
 
   } else if (scenario == 3) {
-    # Alt 3: 50% Max F
+    # alt 3: 50% Max F
     f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40) * 0.5
 
   } else if (scenario == 4) {
-    # Alt 4: 5-Year Average (Updated)
+    # alt 4: 5-Year Average
     f_out = F_avg
 
   } else if (scenario == 5) {
-    # Alt 5: No Fishing
+    # alt 5: No Fishing
     f_out = 0
 
   } else if (scenario == 6) {
-    # Alt 6: OFL (F35)
+    # alt 6: OFL (F35)
     f_out = get_tier_f(ssb, f_ref = F35, b_ref = B35)
 
   } else if (scenario == 7) {
-    # Alt 7: Approaching Overfished
+    # alt 7: Approaching Overfished
     if (year_idx <= 3) {
       f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
     } else {
@@ -285,16 +285,14 @@ run_projections <- function(report, future_catch = NULL,
 
   # setup
   spawn_frac = report$spawn_fract
-
   n_ages =length(report$waa)
   last_yr_idx = length(report$years)
   m_vec = rep(report$M, n_ages)
   mat_vec = report$maa
   wt_vec = report$waa
   n_start = report$Nat[, last_yr_idx]
-
-  sel_vec <- report$slx[,1] # flag: this won't work with POP!!
-
+  sel_vec = report$slx[,1] # flag: this won't work with POP in this form!!
+  mat_wt_spawn_vec = sex_ratio * wt_vec * mat_vec * exp(-m_vec * spawn_frac)
   # recruitment parameters (Mean)
   hist_rec_val = report$recruits[report$years %in% (1977 + report$ages[[1]]):(tail(report$years, 1) - report$ages[[1]])]
   a_mean = mean(hist_rec_val, na.rm = TRUE) # arithmetic mean
@@ -321,11 +319,11 @@ run_projections <- function(report, future_catch = NULL,
     # Stats for Mean/IG
     r_mean = a_mean,
     h_mean = h_mean,
-    # Curve Params for Ricker/BH
+    # curve Params for Ricker/BH
     b0 = b0_val,
     r0 = r0_val,
     h = h_val,
-    # Error
+    # error
     sigma_r = sig_r_val,
     rho = rho_val
   )
@@ -335,7 +333,7 @@ run_projections <- function(report, future_catch = NULL,
   }
 
   # catch
-  # Scenario 2 gets the full custom vector
+  # scenario 2 gets the full custom vector
   # others get only the first year (current yYear)
   catch_vec_author <- rep(NA, n_years)
   if (!is.null(future_catch)) {
@@ -360,66 +358,141 @@ run_projections <- function(report, future_catch = NULL,
     catch_vec_author[3] <- s1_catch[3] * yield_ratio
     # (Optional: extend further ...)
   }
-  tidytable::tidytable(scenario = 1:7) %>%
-    tidytable::mutate(res =  tidytable::map(scenario, function(scen) {
 
-      fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_standard
+  # speed test - changing to lapply instead of tidytable
 
-      tidytable::tidytable(sim_id = 1:n_sims) %>%
-        tidytable::mutate(projection_output = tidytable::map(sim_id, function(id) {
+all_scenarios_list <- lapply(1:7, function(scen) {
 
-          n_curr = n_start
-          chi_curr = 0
-          output_list = list()
-          f_year_1 = NULL
-          for(y in 1:n_years) {
+    fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_standard
+    simulations_list =lapply(1:n_sims, function(id) {
 
-            # SSB
-            # apply unit_conversion and sex_ratio
-            ssb_curr = sum(n_curr * sex_ratio * wt_vec * mat_vec * exp(-m_vec * spawn_frac)) * unit_conversion
-            if(is.na(ssb_curr)) ssb_curr = 0
+      n_curr = n_start
+      chi_curr = 0
+      f_year_1 = NULL
 
-            # determine F
-            target_c = fixed_catch_vec[y]
-            f_val = 0
+      # preallocate
+      ssb_out <- numeric(n_years)
+      catch_out <- numeric(n_years)
+      rec_out <- numeric(n_years)
+      f_out <- numeric(n_years)
+      year_out <- report$years[last_yr_idx] + (1:n_years) - 1
 
-            if (!is.na(target_c)) {
-              # fixed catch mode
-              expl_bio = sum(n_curr * wt_vec * sel_vec) * unit_conversion
-              if(target_c > expl_bio) {
-                f_val = 5.0
-              } else {
-                f_val = get_f_from_catch(target_c, n_curr, m_vec, sel_vec, wt_vec, unit_conversion)
-              }
-            } else {
-              # HCR
-              f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1)
-            }
+      for(y in 1:n_years) {
+        # fast SSB calculation using hoisted variables
+        ssb_curr = sum(n_curr * mat_wt_spawn_vec) * unit_conversion
+        if(is.na(ssb_curr)) ssb_curr = 0
 
-            # project
-            step_res <- project_step(
-              n_at_age = n_curr, m_at_age = m_vec, sel_at_age = sel_vec,
-              wt_at_age = wt_vec, mat_at_age = mat_vec, f_current = f_val,
-              rec_params = rec_params, prev_chi = chi_curr, spawn_frac = spawn_frac
-            )
+        target_c = fixed_catch_vec[y]
+        f_val = 0
 
-            n_curr = step_res$n_at_age
-            chi_curr = step_res$chi
-
-            output_list[[y]] <- data.table::data.table(
-              year = report$years[last_yr_idx] + y - 1,
-              ssb = step_res$ssb * unit_conversion * sex_ratio,
-              catch = step_res$catch_biomass * unit_conversion,
-              recruitment = n_curr[1],
-              f = f_val
-            )
+        if (!is.na(target_c)) {
+          expl_bio = sum(n_curr * wt_vec * sel_vec) * unit_conversion
+          if(target_c > expl_bio) {
+            f_val = 5.0
+          } else {
+            f_val = get_f_from_catch(target_c, n_curr, m_vec, sel_vec, wt_vec, unit_conversion)
           }
-          return(data.table::rbindlist(output_list))
-        })) %>%
-        tidytable::unnest(projection_output)
-    })) %>%
-    tidytable::unnest(res)
+        } else {
+          f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1)
+        }
+
+        # save first year F to use in Scenario 4 average calculation later
+        if (y == 1) f_year_1 = f_val
+
+        step_res <- project_step(
+          n_at_age = n_curr, m_at_age = m_vec, sel_at_age = sel_vec,
+          wt_at_age = wt_vec, mat_at_age = mat_vec, f_current = f_val,
+          rec_params = rec_params, prev_chi = chi_curr, spawn_frac = spawn_frac
+        )
+
+        n_curr = step_res$n_at_age
+        chi_curr = step_res$chi
+
+        ssb_out[y] <- step_res$ssb * unit_conversion * sex_ratio
+        catch_out[y] <- step_res$catch_biomass * unit_conversion
+        rec_out[y] <- n_curr[1]
+        f_out[y] <- f_val
+      }
+
+      return(data.table::data.table(
+        scenario = scen,
+        sim_id = id,
+        year = year_out,
+        ssb = ssb_out,
+        catch = catch_out,
+        recruitment = rec_out,
+        f = f_out
+      ))
+    })
+
+    # bind all sims for this scenario
+    return(data.table::rbindlist(simulations_list))
+  })
+  # bind all scenarios together
+  return(data.table::rbindlist(all_scenarios_list))
+
 }
+
+  # tidytable::tidytable(scenario = 1:7) %>%
+  #   tidytable::mutate(res =  tidytable::map(scenario, function(scen) {
+  #
+  #     fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_standard
+  #
+  #     tidytable::tidytable(sim_id = 1:n_sims) %>%
+  #       tidytable::mutate(projection_output = tidytable::map(sim_id, function(id) {
+  #
+  #         n_curr = n_start
+  #         chi_curr = 0
+  #         output_list = list()
+  #         f_year_1 = NULL
+  #         for(y in 1:n_years) {
+  #
+  #           # SSB
+  #           # apply unit_conversion and sex_ratio
+  #           ssb_curr = sum(n_curr * sex_ratio * wt_vec * mat_vec * exp(-m_vec * spawn_frac)) * unit_conversion
+  #           if(is.na(ssb_curr)) ssb_curr = 0
+  #
+  #           # determine F
+  #           target_c = fixed_catch_vec[y]
+  #           f_val = 0
+  #
+  #           if (!is.na(target_c)) {
+  #             # fixed catch mode
+  #             expl_bio = sum(n_curr * wt_vec * sel_vec) * unit_conversion
+  #             if(target_c > expl_bio) {
+  #               f_val = 5.0
+  #             } else {
+  #               f_val = get_f_from_catch(target_c, n_curr, m_vec, sel_vec, wt_vec, unit_conversion)
+  #             }
+  #           } else {
+  #             # HCR
+  #             f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1)
+  #           }
+  #
+  #           # project
+  #           step_res <- project_step(
+  #             n_at_age = n_curr, m_at_age = m_vec, sel_at_age = sel_vec,
+  #             wt_at_age = wt_vec, mat_at_age = mat_vec, f_current = f_val,
+  #             rec_params = rec_params, prev_chi = chi_curr, spawn_frac = spawn_frac
+  #           )
+  #
+  #           n_curr = step_res$n_at_age
+  #           chi_curr = step_res$chi
+  #
+  #           output_list[[y]] <- data.table::data.table(
+  #             year = report$years[last_yr_idx] + y - 1,
+  #             ssb = step_res$ssb * unit_conversion * sex_ratio,
+  #             catch = step_res$catch_biomass * unit_conversion,
+  #             recruitment = n_curr[1],
+  #             f = f_val
+  #           )
+  #         }
+  #         return(data.table::rbindlist(output_list))
+  #       })) %>%
+  #       tidytable::unnest(projection_output)
+  #   })) %>%
+  #   tidytable::unnest(res)
+# }
 
 
 #' Format Projection Results (Dynamic Variable)
@@ -428,6 +501,7 @@ run_projections <- function(report, future_catch = NULL,
 #' @param var The variable to summarize: "ssb", "catch", or "f"
 #' @return A tidytable matching the ADMB csv format
 #' @export
+
 format_output <- function(projection_data, var = "ssb") {
   scen_map = data.table::data.table(scenario = 1:7,
     name = c("maxf", "authf", "half_maxf", "avg5f", "nof", "overf", "appoverf")
