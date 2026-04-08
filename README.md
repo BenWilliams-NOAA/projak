@@ -32,6 +32,13 @@ result = run_projections(rpt, future_catch = c("2024" = 1170.036), yield_ratio =
 format_output(result, var = "catch")
 format_output(result, var = "f")
 format_output(result, var = "ssb")
+
+# generate all the above tables and a 'main table' for the SAFE
+proj_rtmb(rpt, year=2026, 
+          species='nork', region = 'goa', 
+          future_catch = c("2024" = 1170.036), 
+          yield_ratio = rpt$yield_ratio, 
+          output_dir = "processed") 
 ```
 
 Alternatively, any model could be made to work with this by simply

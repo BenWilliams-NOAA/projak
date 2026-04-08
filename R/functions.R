@@ -417,6 +417,102 @@ format_output <- function(projection_data, var = "ssb") {
     tidytable::mutate(tidytable::across(-year, ~ if(var == "f") round(.x, 4) else round(.x, 1)))
 }
 
+#' Generate Executive Summary and Projections
+#' @param report The RTMB report object
+#' @param year current assessment year
+#' @param species species name string
+#' @param region region name string
+#' @param future_catch numeric vector of catches for the next 2 years
+#' @param yield_ratio ratio to scale maxABC to Author ABC (e.g. 0.8)
+#' @param output_dir where to save the CSVs
+proj_rtmb <- function(report, year, species, region,
+                              future_catch, yield_ratio,
+                              output_dir = "processed") {
+
+  if(!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+  # run projections (runs scenarios 1-7)
+  # use unit_conversion=1 assuming report and catch units match (e.g., Tons)
+  raw_proj <- run_projections(
+    report = report,
+    future_catch = future_catch,
+    yield_ratio = yield_ratio,
+    n_sims = 1000,
+    n_years = 14,
+    rec_model = "IG"
+  )
+
+  # format and save standard scenario files
+  ssb_tab = format_output(raw_proj, "ssb")
+  f_tab   = format_output(raw_proj, "f")
+  yld_tab = format_output(raw_proj, "catch")
+
+  vroom::vroom_write(ssb_tab, file.path(output_dir, "mscen_ssb.csv"), ",")
+  vroom::vroom_write(f_tab,   file.path(output_dir, "mscen_f.csv"), ",")
+  vroom::vroom_write(yld_tab, file.path(output_dir, "mscen_yld.csv"), ",")
+
+  # build executive summary table
+  # pulling reference points directly from the report object
+  y1 <- year + 1
+  y2 <- year + 2
+
+  # get year 1 and year 2 means for Scenario 1 (Max ABC) and Scenario 6 (OFL)
+  summary_stats = raw_proj %>%
+    tidytable::filter(year %in% c(y1, y2)) %>%
+    tidytable::summarise(
+      ssb = mean(ssb),
+      abc = mean(catch),
+      f   = mean(f),
+      .by = c(year, scenario)
+    )
+
+  # xtract specific rows for the table
+  # scenario 1 = Max ABC/F40, scenario 6 = OFL/F35
+  exec_df = data.frame(
+    item = c(
+      "M (natural mortality)",
+      "Tier",
+      "Projected total biomass (t)",
+      "Projected female spawning biomass (t)",
+      "B100%", "B40%", "B35%",
+      "FOFL", "maxFABC", "FABC",
+      "OFL (t)", "maxABC (t)", "ABC (t)"
+    ),
+    y1_val = c(
+      report$M,
+      ifelse(summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
+      NA, # Total biomass calculation depends on your report structure
+      summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1],
+      report$B0, report$B40, report$B35,
+      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==6],
+      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==1],
+      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==2],
+      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==6],
+      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==1],
+      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==2]
+    ),
+    y2_val = c(
+      report$M,
+      ifelse(summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
+      NA,
+      summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1],
+      report$B0, report$B40, report$B35,
+      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==6],
+      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==1],
+      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==2],
+      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==6],
+      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==1],
+      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==2]
+    )
+  )
+
+  # formatting
+  colnames(exec_df) = c("item", as.character(y1), as.character(y2))
+  vroom::vroom_write(exec_df, file.path(output_dir, "exec_summ.csv"), ",")
+
+  return(exec_df)
+}
+
 # murky waters...
 #' Apply TAC-ABC fitting logic
 #' @param abc vector of calculated ABCs for the species in the complex
