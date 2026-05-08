@@ -8,8 +8,13 @@ run_projections(
   report,
   future_catch = NULL,
   yield_ratio = NULL,
-  tacpar = NULL,
-  ...
+  n_sims = 1000,
+  n_years = 14,
+  unit_conversion = 1,
+  sex_ratio = 0.5,
+  rec_model = "IG",
+  sigma_r_override = NULL,
+  scenarios = 1:7
 )
 }
 \arguments{

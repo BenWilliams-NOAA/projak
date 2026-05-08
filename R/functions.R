@@ -130,12 +130,11 @@ get_f_from_catch <- function(target_catch, n_at_age, m_at_age, sel_at_age, wt_at
     C_bio = sum(C_num * wt_at_age) * scalar
     return(C_bio - target_catch)
   }
-
-  tryCatch({
-    res <- uniroot(calc_catch_diff, interval = c(0, 5), tol = 1e-5)
+  
+  if(target_catch <= 0) return(0)
+  res <- uniroot(calc_catch_diff, interval = c(1e-6, 2), tol = 1e-8)
     return(res$root)
-  }, error = function(e) return(3.0))
-}
+ }
 
 #' Single Year Population Projection Step
 #'
@@ -293,7 +292,7 @@ run_projections <- function(report, future_catch = NULL,
   mat_vec = report$maa
   wt_vec = report$waa
   n_start = report$Nat[, last_yr]
-  sel_vec = report$slx[, 1] # flag!!! won't work with many assessments...
+  sel_vec = report$slx_fish[, last_yr] # flag!!! won't work with some assessments...
   mat_wt_spawn_vec = sex_ratio * wt_vec * mat_vec * exp(-m_vec * spawn_frac)
 
   year_out_template = report$years[last_yr] + (1:n_years) - 1
@@ -328,6 +327,7 @@ run_projections <- function(report, future_catch = NULL,
     catch_vec_author[1:len] = future_catch[1:len]
   }
 
+
   # main loop ----
   results_list = list()
   s1_means = NULL
@@ -351,7 +351,7 @@ run_projections <- function(report, future_catch = NULL,
       chi_curr = 0
       f_year_1 = NULL
 
-      ssb_out = catch_out = rec_out = f_out = numeric(n_years)
+      ssb_out = catch_out = rec_out = tot_bio_out = f_out = numeric(n_years)
 
       for(y in 1:n_years) {
         ssb_curr = sum(n_curr * mat_wt_spawn_vec) * unit_conversion
@@ -366,19 +366,25 @@ run_projections <- function(report, future_catch = NULL,
         }
 
         if (y == 1) f_year_1 = f_val
-
+  if (y == 1 && id == 1) {
+  expl_bio_test = sum(n_curr * wt_vec * sel_vec) * unit_conversion
+  print(paste("CATCH TARGET:", target_c))
+  print(paste("EXPLOITABLE BIOMASS:", expl_bio_test))
+}
         step_res = project_step(n_curr, m_vec, sel_vec, wt_vec, mat_vec, f_val, rec_params, chi_curr, spawn_frac)
 
         n_curr = step_res$n_at_age
         chi_curr = step_res$chi
         ssb_out[y] = step_res$ssb * unit_conversion * sex_ratio
         catch_out[y] = step_res$catch_biomass * unit_conversion
+        tot_bio_out[y] = sum(n_curr * wt_vec) * unit_conversion 
         rec_out[y] = n_curr[1]
         f_out[y] = f_val
       }
       # closes the 'y' for loop and returns the data.table for one simulation
       return(data.table::data.table(scenario = scen, sim_id = id, year = year_out_template,
                                     ssb = ssb_out, catch = catch_out,
+                                    tot_bio = tot_bio_out,
                                     recruitment = rec_out, f = f_out))
     }) # close the lapply
 
@@ -425,6 +431,7 @@ format_output <- function(projection_data, var = "ssb") {
 #' @param future_catch numeric vector of catches for the next 2 years
 #' @param yield_ratio ratio to scale maxABC to Author ABC (e.g. 0.8)
 #' @param output_dir where to save the CSVs
+#' @export
 proj_rtmb <- function(report, year, species, region,
                               future_catch, yield_ratio,
                               output_dir = "processed") {
@@ -462,6 +469,7 @@ proj_rtmb <- function(report, year, species, region,
     tidytable::summarise(
       ssb = mean(ssb),
       abc = mean(catch),
+      tot_bio = mean(tot_bio),
       f   = mean(f),
       .by = c(year, scenario)
     )
@@ -481,7 +489,7 @@ proj_rtmb <- function(report, year, species, region,
     y1_val = c(
       report$M,
       ifelse(summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      NA, # Total biomass calculation depends on your report structure
+      summary_stats$tot_bio[summary_stats$year==y1 & summary_stats$scenario==1],
       summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1],
       report$B0, report$B40, report$B35,
       summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==6],
@@ -494,7 +502,7 @@ proj_rtmb <- function(report, year, species, region,
     y2_val = c(
       report$M,
       ifelse(summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      NA,
+      summary_stats$tot_bio[summary_stats$year==y2 & summary_stats$scenario==1],
       summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1],
       report$B0, report$B40, report$B35,
       summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==6],
@@ -518,53 +526,53 @@ proj_rtmb <- function(report, year, species, region,
 #' @param abc vector of calculated ABCs for the species in the complex
 #' @param tacpar the list object from read_tacpar()
 #' @param total_oy_cap The OY cap (e.g., 2000 for 2 million t)
-apply_tac <- function(abc, tacpar, total_oy_cap = 1945) {
-  # scale ABCs
-  #in ADMB: abctmp = agg_abc(itacspp) / maxabc(itacspp)
-  scaled_abc = abc / tacpar$maxabc
-
-  # find nodes (indexing)
-  # in ADMB: ijunk = min(nnodes, int(abctmp * nnodes))
-  # note: R uses 1-based indexing, ADMB used 0-based
-  node_idx = pmin(tacpar$nnodes, floor(scaled_abc * tacpar$nnodes)) + 1
-
-  # compute aggregate TACs
-  # in ADMB: agg_tac(itacspp) = abctmp * mfexp(theta(ijunk,itacspp))
-  # extract the specific theta value for each species' current node
-  weights = sapply(seq_along(abc), function(i) tacpar$theta[node_idx[i], i])
-  agg_tac = scaled_abc * exp(weights)
-
-  # constrain to OY Cap
-  # in ADMB: agg_tac /= sum(agg_tac); agg_tac *= 1945.;
-  final_tac = (agg_tac / sum(agg_tac)) * total_oy_cap
-
-  return(final_tac)
-}
+# apply_tac <- function(abc, tacpar, total_oy_cap = 1945) {
+#   # scale ABCs
+#   #in ADMB: abctmp = agg_abc(itacspp) / maxabc(itacspp)
+#   scaled_abc = abc / tacpar$maxabc
+#
+#   # find nodes (indexing)
+#   # in ADMB: ijunk = min(nnodes, int(abctmp * nnodes))
+#   # note: R uses 1-based indexing, ADMB used 0-based
+#   node_idx = pmin(tacpar$nnodes, floor(scaled_abc * tacpar$nnodes)) + 1
+#
+#   # compute aggregate TACs
+#   # in ADMB: agg_tac(itacspp) = abctmp * mfexp(theta(ijunk,itacspp))
+#   # extract the specific theta value for each species' current node
+#   weights = sapply(seq_along(abc), function(i) tacpar$theta[node_idx[i], i])
+#   agg_tac = scaled_abc * exp(weights)
+#
+#   # constrain to OY Cap
+#   # in ADMB: agg_tac /= sum(agg_tac); agg_tac *= 1945.;
+#   final_tac = (agg_tac / sum(agg_tac)) * total_oy_cap
+#
+#   return(final_tac)
+# }
 
 
 # possible setup for adjusting
-run_projections <- function(report,
-                            future_catch = NULL,
-                            yield_ratio = NULL,
-                            tacpar = NULL,  # Add this here
-                            ...) {
-
- #...
-
-  for(scen in run_order) {
-
-    if (scen == 2 && !is.null(tac_params)) {
-
-      # 1. get current Max ABC catch for all species in the complex
-      # assumes you are projecting the whole complex at once
-      # abc_current <- [Calculated Catch at F40]
-
-      # apply the fitted TAC logic
-      # catch_vec_author <- apply_tac(abc_current, tac_params)
-    }
-
-    # more code...
-  }
-}
+# run_projections <- function(report,
+#                             future_catch = NULL,
+#                             yield_ratio = NULL,
+#                             tacpar = NULL,  # Add this here
+#                             ...) {
+#
+#  #...
+#
+#   for(scen in run_order) {
+#
+#     if (scen == 2 && !is.null(tac_params)) {
+#
+#       # 1. get current Max ABC catch for all species in the complex
+#       # assumes you are projecting the whole complex at once
+#       # abc_current <- [Calculated Catch at F40]
+#
+#       # apply the fitted TAC logic
+#       # catch_vec_author <- apply_tac(abc_current, tac_params)
+#     }
+#
+#     # more code...
+#   }
+# }
 
 
