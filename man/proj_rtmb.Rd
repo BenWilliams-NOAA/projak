@@ -7,11 +7,10 @@
 proj_rtmb(
   report,
   year,
-  species,
-  region,
   future_catch,
   yield_ratio,
-  output_dir = "processed"
+  output_dir = "processed",
+  perc_max = 0.5
 )
 }
 \arguments{
@@ -19,15 +18,13 @@ proj_rtmb(
 
 \item{year}{current assessment year}
 
-\item{species}{species name string}
-
-\item{region}{region name string}
-
 \item{future_catch}{numeric vector of catches for the next 2 years}
 
 \item{yield_ratio}{ratio to scale maxABC to Author ABC (e.g. 0.8)}
 
 \item{output_dir}{where to save the CSVs}
+
+\item{perc_max}{allow for a maximum percent of F to be used in scenario 4 - between 0-1}
 }
 \description{
 Generate Executive Summary and Projections

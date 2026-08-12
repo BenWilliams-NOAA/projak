@@ -282,13 +282,15 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #' @param rec_model the recruitment type: "Mean", "IG" (mean using Inverse Gaussian),
 #'                  "Ricker", or "BH" (Beverton-Holt).
 #' @param sigma_r_override optional numeric to override report$sigmaR.
-#' @param scenarios the NPFMC scenarios to run (1:7)
+#' @param scenarios the NPFMC scenarios to run (1:8), the 8th is a new 5-year table
+#' @param perc_max allow for a maximum percent of F to be used in scenario 4 - between 0-1
 #' @export
 run_projections <- function(report, future_catch = NULL,
                             yield_ratio = NULL, n_sims = 1000,
                             n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
                             rec_model = "IG", sigma_r_override = NULL,
-                            scenarios = 1:8, perc_max) {
+                            scenarios = 1:8, perc_max, seed = 54786) {
+	set.seed(seed)
 
   # setup
   spawn_frac = report$spawn_fract
@@ -493,6 +495,7 @@ format_output <- function(projection_data, var = "ssb") {
 #' @param future_catch numeric vector of catches for the next 2 years
 #' @param yield_ratio ratio to scale maxABC to Author ABC (e.g. 0.8)
 #' @param output_dir where to save the CSVs
+#' @param perc_max allow for a maximum percent of F to be used in scenario 4 - between 0-1
 #' @export
 proj_rtmb <- function(report, year, future_catch, yield_ratio,
                               output_dir = "processed", perc_max = 0.5) {
