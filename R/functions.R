@@ -204,7 +204,9 @@ project_step <- function(n_at_age, m_at_age, sel_at_age,
 
 #' Scenario Logic
 get_scenario_f <- function(scenario, ssb, year_idx, report,
-                           current_F_sys = NULL) {
+                           current_F_sys = NULL, perc_max) {
+  
+  if(perc_max > 1.0) stop("'perc_max' must be between 0-1")
 
   F40 = report$F40
   F35 = report$F35
@@ -216,7 +218,7 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
   hist_Fs <- report$Ft[(term_idx-4):(term_idx-1)]
 
   # get F for Current Year
-  #    if we calculated a specific F for the fixed catch use it.
+  #    if calculated a specific F for the fixed catch use it.
   #    otherwise fall back to the report's terminal F.
   last_F = if(!is.null(current_F_sys)) current_F_sys else report$Ft[term_idx]
 
@@ -234,12 +236,12 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
     f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
 
   } else if (scenario == 3) {
-    # alt 3: 50% Max F
-    f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40) * 0.5
+    # alt 3: 5-Year Average
+    f_out = F_avg
 
   } else if (scenario == 4) {
-    # alt 4: 5-Year Average
-    f_out = F_avg
+    # alt 3: XX% Max F
+    f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40) * perc_max
 
   } else if (scenario == 5) {
     # alt 5: No Fishing
@@ -256,6 +258,10 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
     } else {
       f_out = get_tier_f(ssb, f_ref = F35, b_ref = B35)
     }
+  } else if (scenario == 8) {
+    # Custom hybrid: Years 1 & 2 catch forced in run_projections
+    # Years 3+ use 5-year average F
+    f_out = F_avg
   }
   return(f_out)
 }
@@ -282,7 +288,7 @@ run_projections <- function(report, future_catch = NULL,
                             yield_ratio = NULL, n_sims = 1000,
                             n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
                             rec_model = "IG", sigma_r_override = NULL,
-                            scenarios = 1:7) {
+                            scenarios = 1:8, perc_max) {
 
   # setup
   spawn_frac = report$spawn_fract
@@ -293,7 +299,7 @@ run_projections <- function(report, future_catch = NULL,
   wt_vec = report$waa
   n_start = report$Nat[, last_yr]
   sel_vec = report$slx_fish[, last_yr] # flag!!! won't work with some assessments...
-  mat_wt_spawn_vec = sex_ratio * wt_vec * mat_vec * exp(-m_vec * spawn_frac)
+  mat_wt_spawn_vec = sex_ratio * wt_vec * mat_vec * exp(-1 * m_vec * spawn_frac)
 
   year_out_template = report$years[last_yr] + (1:n_years) - 1
 
@@ -331,7 +337,7 @@ run_projections <- function(report, future_catch = NULL,
   # main loop ----
   results_list = list()
   s1_means = NULL
-  run_order = sort(unique(scenarios))
+  run_order = sort(scenarios)
 
   for(scen in run_order) {
 
@@ -343,7 +349,18 @@ run_projections <- function(report, future_catch = NULL,
       catch_vec_author[3] = s1_means[3] * yield_ratio
     }
 
-    fixed_catch_vec = if(scen == 2) catch_vec_author else catch_vec_std
+    if (scen == 2) {
+      fixed_catch_vec = catch_vec_author
+    } else if (scen == 8) {
+      # Scenario 8: Force Catch for Y1 and Y2 only
+      fixed_catch_vec = rep(NA, n_years)
+      if (!is.null(future_catch)) {
+        len = min(length(future_catch), 2)
+        fixed_catch_vec[1:len] = catch_vec_author[1:len]
+      }
+    } else {
+      fixed_catch_vec = catch_vec_std
+    }
 
     # run sims
     sims <- lapply(1:n_sims, function(id) {
@@ -351,26 +368,33 @@ run_projections <- function(report, future_catch = NULL,
       chi_curr = 0
       f_year_1 = NULL
 
-      ssb_out = catch_out = rec_out = tot_bio_out = f_out = numeric(n_years)
+      ssb_out = catch_out = rec_out = tot_bio_out = f_out = ofl_out = abc_out = numeric(n_years)
 
       for(y in 1:n_years) {
         ssb_curr = sum(n_curr * mat_wt_spawn_vec) * unit_conversion
 
+        f_ofl_val = get_tier_f(ssb_curr, report$F35, report$B35)
+        f_abc_val = get_tier_f(ssb_curr, report$F40, report$B40)
+
+        Z_ofl = m_vec + f_ofl_val * sel_vec
+        catch_ofl = sum(n_curr * (f_ofl_val * sel_vec / Z_ofl) * (1 - exp(-Z_ofl)) * wt_vec) * unit_conversion
+        ofl_out[y] = catch_ofl
+
+        Z_abc = m_vec + f_abc_val * sel_vec
+        catch_abc = sum(n_curr * (f_abc_val * sel_vec / Z_abc) * (1 - exp(-Z_abc)) * wt_vec) * unit_conversion
+        abc_out[y] = catch_abc
+        
         target_c = fixed_catch_vec[y]
         if (!is.na(target_c)) {
           expl_bio = sum(n_curr * wt_vec * sel_vec) * unit_conversion
           f_val = if(target_c > expl_bio) 5.0 else
             get_f_from_catch(target_c, n_curr, m_vec, sel_vec, wt_vec, unit_conversion)
         } else {
-          f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1)
+          f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1, perc_max = perc_max)
         }
 
         if (y == 1) f_year_1 = f_val
-  if (y == 1 && id == 1) {
-  expl_bio_test = sum(n_curr * wt_vec * sel_vec) * unit_conversion
-  print(paste("CATCH TARGET:", target_c))
-  print(paste("EXPLOITABLE BIOMASS:", expl_bio_test))
-}
+
         step_res = project_step(n_curr, m_vec, sel_vec, wt_vec, mat_vec, f_val, rec_params, chi_curr, spawn_frac)
 
         n_curr = step_res$n_at_age
@@ -381,11 +405,12 @@ run_projections <- function(report, future_catch = NULL,
         rec_out[y] = n_curr[1]
         f_out[y] = f_val
       }
-      # closes the 'y' for loop and returns the data.table for one simulation
+      # closes the for loop and returns one simulation
       return(data.table::data.table(scenario = scen, sim_id = id, year = year_out_template,
                                     ssb = ssb_out, catch = catch_out,
                                     tot_bio = tot_bio_out,
-                                    recruitment = rec_out, f = f_out))
+                                    recruitment = rec_out, f = f_out,
+                                  ofl = ofl_out, abc = abc_out))
     }) # close the lapply
 
     scen_dt <- data.table::rbindlist(sims)
@@ -402,6 +427,45 @@ run_projections <- function(report, future_catch = NULL,
 
 
 
+#' Generate the 5-Year Expected Catch and Projection Table
+#'
+#' @param raw_proj The raw output table from run_projections()
+#' @param report The RTMB report object (needed for B100% / B0)
+#' @param start_year Current assessment year
+#' @return A tidytable formatted for the 5-year projection table
+#' @export
+proj_5yr_table <- function(raw_proj, report, start_year) {
+  
+  if (!8 %in% unique(raw_proj$scenario)) {
+    stop("Scenario 8 is missing. Ensure 'scenarios' includes 8 when running run_projections().")
+  }
+
+  b100 <- report$B0
+
+  proj_5yr <- raw_proj %>%
+    tidytable::filter(scenario == 8, year %in% (start_year + 1):(start_year + 5)) %>%
+    tidytable::summarise(
+      `Expected Catch` = mean(catch),
+      `OFL` = mean(ofl),
+      `ABC` = mean(abc),
+      `Mean SSB` = mean(ssb),
+      .by = year
+    ) %>%
+    tidytable::mutate(
+      `Mean Relative Spawning Biomass` = `Mean SSB` / b100
+    ) %>%
+    tidytable::rename(Year = year) %>%
+    # Optional rounding to clean up the output formatting
+    tidytable::mutate(
+      `Expected Catch` = round(`Expected Catch`, 0),
+      `OFL` = round(`OFL`, 0),
+      `ABC` = round(`ABC`, 0),
+      `Mean SSB` = round(`Mean SSB`, 0),
+      `Mean Relative Spawning Biomass` = round(`Mean Relative Spawning Biomass`, 3)
+    )
+
+  return(proj_5yr)
+}
 
 
 #' Format Projection Results (Dynamic Variable)
@@ -434,7 +498,7 @@ format_output <- function(projection_data, var = "ssb") {
 #' @export
 proj_rtmb <- function(report, year, species, region,
                               future_catch, yield_ratio,
-                              output_dir = "processed") {
+                              output_dir = "processed", perc_max = 0.5) {
 
   if(!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
@@ -446,7 +510,9 @@ proj_rtmb <- function(report, year, species, region,
     yield_ratio = yield_ratio,
     n_sims = 1000,
     n_years = 14,
-    rec_model = "IG"
+    rec_model = "IG",
+    scenarios = 1:8,
+    perc_max = perc_max
   )
 
   # format and save standard scenario files
@@ -518,7 +584,11 @@ proj_rtmb <- function(report, year, species, region,
   colnames(exec_df) = c("item", as.character(y1), as.character(y2))
   vroom::vroom_write(exec_df, file.path(output_dir, "exec_summ.csv"), ",")
 
-  return(exec_df)
+  table_5yr <- proj_5yr_table(raw_proj, report, start_year = year)
+  vroom::vroom_write(table_5yr, file.path(output_dir, "proj_5yr_table.csv"), ",")
+
+
+  return(list(exec_df, table_5yr))
 }
 
 # murky waters...
