@@ -273,7 +273,7 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #' @param yield_ratio A numeric value (e.g., 0.3598).
 #'        If provided, Scenario 2 (Author F) catches for years 2 & 3 will be calculated as:
 #'        Scenario 1 Catch * yield_ratio.
-#' @param n_sims number of simulations
+#' @param n_sims number of simulations, default 1500
 #' @param n_years number of projection years
 #' @param unit_conversion Scaling factor to align Biomass units with Catch units.
 #'        - If Nat=Millions, Waa=Grams, Catch=Tons -> Use 1.0
@@ -286,7 +286,7 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #' @param perc_max allow for a maximum percent of F to be used in scenario 4 - between 0-1
 #' @export
 run_projections <- function(report, future_catch = NULL,
-                            yield_ratio = NULL, n_sims = 1000,
+                            yield_ratio = NULL, n_sims = 1500,
                             n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
                             rec_model = "IG", sigma_r_override = NULL,
                             scenarios = 1:8, perc_max, seed = 54786) {

@@ -8,7 +8,7 @@ run_projections(
   report,
   future_catch = NULL,
   yield_ratio = NULL,
-  n_sims = 1000,
+  n_sims = 1500,
   n_years = 14,
   unit_conversion = 1,
   sex_ratio = 0.5,
@@ -28,7 +28,7 @@ run_projections(
 If provided, Scenario 2 (Author F) catches for years 2 & 3 will be calculated as:
 Scenario 1 Catch * yield_ratio.}
 
-\item{n_sims}{number of simulations}
+\item{n_sims}{number of simulations, default 1500}
 
 \item{n_years}{number of projection years}
 
