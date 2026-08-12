@@ -8,7 +8,7 @@
 <!-- badges: end -->
 
 The goal of projak is to make an R package that can generate the
-projection module in `RTMB`
+projection module from an `RTMB` report
 
 ## Installation
 
@@ -22,48 +22,51 @@ pak::pak("BenWilliams-NOAA/projak")
 
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
-
-``` r
-library(projak)
-# pull in results from a RTMB assessment
+<!-- # pull in results from a RTMB assessment
 rpt = projak::m22.1 # 2024 goa northern rockfish assessment results - 2024 catch data was incomplete
 result = run_projections(rpt, future_catch = c("2024" = 1170.036), yield_ratio = rpt$yield_ratio)
 format_output(result, var = "catch")
 format_output(result, var = "f")
 format_output(result, var = "ssb")
-
-# generate all the above tables and a 'main table' for the SAFE
+&#10;# generate all the above tables and a 'main table' for the SAFE
 proj_rtmb(rpt, year=2026, 
           species='nork', region = 'goa', 
           future_catch = c("2024" = 1170.036), 
           yield_ratio = rpt$yield_ratio, 
-          output_dir = "processed") 
+          output_dir = "processed")  -->
+
+``` r
+library(projak)
 ```
 
-Alternatively, any model could be made to work with this by simply
-grabbing the outputs and placing them in a named list.
+Any model could be made to work with this by simply grabbing the outputs
+and placing them in a named list.
 
 ``` r
 rpt <- list(
   years = 1977:2024,
-  ages = list(2),
-  Nat = my_abundance_matrix, 
+  ages = 2:30, # note that Nat and waa etc, must match, this field can match the comps ages e.g., rec_age:plus_age
+  Nat = my_abundance_matrix, # dims ages x years - years as columns
   M = 0.06,
   waa = c(0.1, 0.5, 0.8, ...),
   maa = c(0.0, 0.01, 0.1, ...),
-  slx = my_selectivity_matrix,
-  spawn_fract = 0.25,
-  recruits = my_historical_rec_vector,
-  log_mean_R = 1.5,
+  slx = my_selectivity_matrix, # matrix of fishery selectivity dims ages x years - years as columns
+  spawn_fract = 0.25, # fraction of year that spawning occurs (spawn_mo - 1) / 12
+  recruits = my_historical_rec_vector, # vector of recruits, length years (e.g., Nat[1,])
+  log_mean_R = 1.5, # log mean recruitment
   sigmaR = 0.5,
   F40 = 0.08,
   B40 = 25000,
   F35 = 0.10,
   B35 = 21000,
-  Ft = my_historical_f_vector,
+  Ft = my_historical_f_vector, # annual F, length years
   yield_ratio = 0.94
 )
+
+proj_rtmb(rpt, year=2026, 
+          future_catch = 1170.036, 
+          yield_ratio = rpt$yield_ratio, 
+          output_dir = "processed")
 ```
 
 # Disclaimer

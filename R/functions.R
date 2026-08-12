@@ -479,7 +479,7 @@ proj_5yr_table <- function(raw_proj, report, start_year) {
 
 format_output <- function(projection_data, var = "ssb") {
   scen_map = data.table::data.table(scenario = 1:7,
-    name = c("maxf", "authf", "half_maxf", "avg5f", "nof", "overf", "appoverf")
+    name = c("maxf", "authf",  "avg5f", "half_maxf", "nof", "overf", "appoverf")
   )
   projection_data %>%
     tidytable::left_join(scen_map, by = "scenario") %>%
