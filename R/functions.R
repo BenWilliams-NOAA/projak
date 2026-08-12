@@ -490,14 +490,11 @@ format_output <- function(projection_data, var = "ssb") {
 #' Generate Executive Summary and Projections
 #' @param report The RTMB report object
 #' @param year current assessment year
-#' @param species species name string
-#' @param region region name string
 #' @param future_catch numeric vector of catches for the next 2 years
 #' @param yield_ratio ratio to scale maxABC to Author ABC (e.g. 0.8)
 #' @param output_dir where to save the CSVs
 #' @export
-proj_rtmb <- function(report, year, species, region,
-                              future_catch, yield_ratio,
+proj_rtmb <- function(report, year, future_catch, yield_ratio,
                               output_dir = "processed", perc_max = 0.5) {
 
   if(!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
