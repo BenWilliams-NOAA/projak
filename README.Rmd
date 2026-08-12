@@ -76,6 +76,7 @@ rpt <- list(
   yield_ratio = 0.94
 )
 
+# future catch is the projected catch in the current year
 proj_rtmb(rpt, year=2026, 
           future_catch = 1170.036, 
           yield_ratio = rpt$yield_ratio, 
