@@ -2,7 +2,9 @@
 
 export("%>%")
 export(format_output)
+export(get_f_from_catch)
 export(get_recruitment)
+export(get_scenario_f)
 export(inverse_gaussian)
 export(proj_5yr_table)
 export(proj_rtmb)

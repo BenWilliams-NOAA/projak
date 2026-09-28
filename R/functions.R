@@ -119,6 +119,21 @@ get_tier_f <- function(ssb, f_ref, b_ref, alpha = 0.05, ssl_protection = FALSE) 
 }
 
 #' Solve for F given a Target Catch
+#' 
+#' Uses the Baranov catch equation and `uniroot` to find the fishing 
+#' mortality rate (F) that results in a specified target catch biomass.
+#'
+#' @param target_catch Numeric. The target catch amount to solve for.
+#' @param n_at_age Numeric vector. The number of fish at each age.
+#' @param m_at_age Numeric vector. The natural mortality rate at each age.
+#' @param sel_at_age Numeric vector. The fishery selectivity at each age.
+#' @param wt_at_age Numeric vector. The weight of fish at each age.
+#' @param scalar Numeric. A scaling factor applied to the calculated catch 
+#'   biomass to match the units of `target_catch`. Defaults to 1.
+#'
+#' @return A numeric value representing the fishing mortality rate (F) that 
+#'   achieves the `target_catch`. Returns `0` if `target_catch` is `<= 0`.
+#' @export
 get_f_from_catch <- function(target_catch, n_at_age, m_at_age, sel_at_age, wt_at_age, scalar=1) {
   calc_catch_diff <- function(f_trial) {
     Z = m_at_age + f_trial * sel_at_age
@@ -199,7 +214,26 @@ project_step <- function(n_at_age, m_at_age, sel_at_age,
 }
 
 
-#' Scenario Logic
+#' Get Fishing Mortality for Projection Scenarios
+#'
+#' Determines the appropriate fishing mortality rate (F) based on the selected 
+#' projection scenario (1-7) and the current state of the stock.
+#'
+#' @param scenario Integer or Character (1-7). The projection scenario alternative to apply:
+#'   1 = Max ABC (F40), 2 = Author ABC, 3 = 5-Year Average F, 4 = Percentage of Max F, 
+#'   5 = No Fishing, 6 = OFL (F35), 7 = Approaching Overfished.
+#' @param ssb Numeric. The Spawning Stock Biomass for the current projection year.
+#' @param year_idx Integer. The index of the projection year (used in Scenario 7).
+#' @param report List. An assessment model report object containing reference points 
+#'   (`F40`, `F35`, `B40`, `B35`) and historical fishing mortality rates (`Ft`).
+#' @param current_F_sys Numeric, optional. A specific fishing mortality rate calculated 
+#'   for the current year. If `NULL` (default), the terminal F from the `report` is used.
+#' @param perc_max Numeric. A proportion between 0 and 1 used for Scenario 4 
+#'   (Percentage of Max F). Defaults to 0.5.
+#'
+#' @return A numeric value representing the fishing mortality rate (F) to apply 
+#'   for the specified scenario.
+#' @export
 get_scenario_f <- function(scenario, ssb, year_idx, report,
                            current_F_sys = NULL, perc_max = 0.5) {
   
@@ -258,6 +292,7 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #' @param sigma_r_override optional numeric to override report$sigmaR.
 #' @param scenarios the NPFMC scenarios to run (1:7)
 #' @param perc_max allow for a maximum percent of F to be used in scenario 4 - between 0-1
+#' @param seed the seed you want default: 123
 #' @export
 run_projections <- function(report, future_catch = NULL, yield_ratio = NULL, n_sims = 1500, n_years = 14, unit_conversion = 1, sex_ratio = 0.5, rec_model = "IG", sigma_r_override = NULL, scenarios = 1:7, perc_max, seed = 123) {
 	set.seed(seed)
@@ -277,7 +312,7 @@ run_projections <- function(report, future_catch = NULL, yield_ratio = NULL, n_s
 
   # recruitment parameters (mean)
   rec_age = report$ages[[1]]
-  hist_rec_val = report$recruits[report$years %in% (1977 + rec_age):(tail(report$years, 1) - rec_age)]
+  hist_rec_val = report$recruits[report$years %in% (1977 + rec_age):(utils::tail(report$years, 1) - rec_age)]
   a_mean = mean(hist_rec_val, na.rm = TRUE)
   h_mean = 1 / mean(1 / hist_rec_val, na.rm = TRUE)
 
@@ -561,59 +596,4 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
 
   return(list(exec_df, table_5yr))
 }
-
-# murky waters...
-#' Apply TAC-ABC fitting logic
-#' @param abc vector of calculated ABCs for the species in the complex
-#' @param tacpar the list object from read_tacpar()
-#' @param total_oy_cap The OY cap (e.g., 2000 for 2 million t)
-# apply_tac <- function(abc, tacpar, total_oy_cap = 1945) {
-#   # scale ABCs
-#   #in ADMB: abctmp = agg_abc(itacspp) / maxabc(itacspp)
-#   scaled_abc = abc / tacpar$maxabc
-#
-#   # find nodes (indexing)
-#   # in ADMB: ijunk = min(nnodes, int(abctmp * nnodes))
-#   # note: R uses 1-based indexing, ADMB used 0-based
-#   node_idx = pmin(tacpar$nnodes, floor(scaled_abc * tacpar$nnodes)) + 1
-#
-#   # compute aggregate TACs
-#   # in ADMB: agg_tac(itacspp) = abctmp * mfexp(theta(ijunk,itacspp))
-#   # extract the specific theta value for each species' current node
-#   weights = sapply(seq_along(abc), function(i) tacpar$theta[node_idx[i], i])
-#   agg_tac = scaled_abc * exp(weights)
-#
-#   # constrain to OY Cap
-#   # in ADMB: agg_tac /= sum(agg_tac); agg_tac *= 1945.;
-#   final_tac = (agg_tac / sum(agg_tac)) * total_oy_cap
-#
-#   return(final_tac)
-# }
-
-
-# possible setup for adjusting
-# run_projections <- function(report,
-#                             future_catch = NULL,
-#                             yield_ratio = NULL,
-#                             tacpar = NULL,  # Add this here
-#                             ...) {
-#
-#  #...
-#
-#   for(scen in run_order) {
-#
-#     if (scen == 2 && !is.null(tac_params)) {
-#
-#       # 1. get current Max ABC catch for all species in the complex
-#       # assumes you are projecting the whole complex at once
-#       # abc_current <- [Calculated Catch at F40]
-#
-#       # apply the fitted TAC logic
-#       # catch_vec_author <- apply_tac(abc_current, tac_params)
-#     }
-#
-#     # more code...
-#   }
-# }
-
 

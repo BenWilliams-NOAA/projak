@@ -43,6 +43,7 @@ Any model could be made to work with this by simply grabbing the outputs
 and placing them in a named list.
 
 ``` r
+#| eval: false
 rpt <- list(
   years = 1977:2024,
   ages = 2:30, # note that Nat and waa etc, must match, this field can match the comps ages e.g., rec_age:plus_age

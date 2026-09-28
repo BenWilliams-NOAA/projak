@@ -13,6 +13,25 @@ get_f_from_catch(
   scalar = 1
 )
 }
+\arguments{
+\item{target_catch}{Numeric. The target catch amount to solve for.}
+
+\item{n_at_age}{Numeric vector. The number of fish at each age.}
+
+\item{m_at_age}{Numeric vector. The natural mortality rate at each age.}
+
+\item{sel_at_age}{Numeric vector. The fishery selectivity at each age.}
+
+\item{wt_at_age}{Numeric vector. The weight of fish at each age.}
+
+\item{scalar}{Numeric. A scaling factor applied to the calculated catch
+biomass to match the units of \code{target_catch}. Defaults to 1.}
+}
+\value{
+A numeric value representing the fishing mortality rate (F) that
+achieves the \code{target_catch}. Returns \code{0} if \code{target_catch} is \verb{<= 0}.
+}
 \description{
-Solve for F given a Target Catch
+Uses the Baranov catch equation and \code{uniroot} to find the fishing
+mortality rate (F) that results in a specified target catch biomass.
 }

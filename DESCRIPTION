@@ -1,16 +1,17 @@
 Package: projak
-Title: What the Package Does (One Line, Title Case)
+Title: Project fishery stock assessments
 Version: 0.0.0.9000
 Authors@R: 
     person("Benjamin", "Williams", , "ben.williams@noaa.gov", role = c("aut", "cre"))
-Description: Projections for AFSC assessments
+Description: Projections for AFSC assessments. Should generally work okay.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports: 
     data.table,
     magrittr,
-    tidytable
+    tidytable,
+    vroom
 Depends: 
     R (>= 3.5)
 LazyData: true

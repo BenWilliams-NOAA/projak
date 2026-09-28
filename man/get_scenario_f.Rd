@@ -2,7 +2,7 @@
 % Please edit documentation in R/functions.R
 \name{get_scenario_f}
 \alias{get_scenario_f}
-\title{Scenario Logic}
+\title{Get Fishing Mortality for Projection Scenarios}
 \usage{
 get_scenario_f(
   scenario,
@@ -13,6 +13,29 @@ get_scenario_f(
   perc_max = 0.5
 )
 }
+\arguments{
+\item{scenario}{Integer or Character (1-7). The projection scenario alternative to apply:
+1 = Max ABC (F40), 2 = Author ABC, 3 = 5-Year Average F, 4 = Percentage of Max F,
+5 = No Fishing, 6 = OFL (F35), 7 = Approaching Overfished.}
+
+\item{ssb}{Numeric. The Spawning Stock Biomass for the current projection year.}
+
+\item{year_idx}{Integer. The index of the projection year (used in Scenario 7).}
+
+\item{report}{List. An assessment model report object containing reference points
+(\code{F40}, \code{F35}, \code{B40}, \code{B35}) and historical fishing mortality rates (\code{Ft}).}
+
+\item{current_F_sys}{Numeric, optional. A specific fishing mortality rate calculated
+for the current year. If \code{NULL} (default), the terminal F from the \code{report} is used.}
+
+\item{perc_max}{Numeric. A proportion between 0 and 1 used for Scenario 4
+(Percentage of Max F). Defaults to 0.5.}
+}
+\value{
+A numeric value representing the fishing mortality rate (F) to apply
+for the specified scenario.
+}
 \description{
-Scenario Logic
+Determines the appropriate fishing mortality rate (F) based on the selected
+projection scenario (1-7) and the current state of the stock.
 }

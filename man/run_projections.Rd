@@ -14,7 +14,7 @@ run_projections(
   sex_ratio = 0.5,
   rec_model = "IG",
   sigma_r_override = NULL,
-  scenarios = 1:8,
+  scenarios = 1:7,
   perc_max,
   seed = 123
 )
@@ -45,9 +45,11 @@ Scenario 1 Catch * yield_ratio.}
 
 \item{sigma_r_override}{optional numeric to override report$sigmaR.}
 
-\item{scenarios}{the NPFMC scenarios to run (1:8), the 8th is a new 5-year table}
+\item{scenarios}{the NPFMC scenarios to run (1:7)}
 
 \item{perc_max}{allow for a maximum percent of F to be used in scenario 4 - between 0-1}
+
+\item{seed}{the seed you want default: 123}
 }
 \description{
 Run NPFMC Scenarios 1-7
