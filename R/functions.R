@@ -341,22 +341,22 @@ run_projections <- function(report, future_catch = NULL,
 
   for(scen in run_order) {
 
-    if (scen == 2 && !is.null(yield_ratio)) {
-      if (is.null(s1_means)) {
-        stop("Scenario 2 with yield_ratio requires Scenario 1 to be run simultaneously.")
-      }
-      catch_vec_author[2] = s1_means[2] * yield_ratio
-      catch_vec_author[3] = s1_means[3] * yield_ratio
-    }
+    current_fixed_catch = catch_vec_std
 
     if (scen == 2) {
-      fixed_catch_vec = catch_vec_author
+      current_fixed_catch = catch_vec_author
+      if (!is.null(yield_ratio)) {
+        if (is.null(s1_means)) {
+          stop("Scenario 2 with yield_ratio requires Scenario 1 to be run simultaneously.")
+        }
+        # overwrite the current scenario's catch vector
+        current_fixed_catch[2] = s1_means[2] * yield_ratio
+        current_fixed_catch[3] = s1_means[3] * yield_ratio
+      }
     } else if (scen == 8) {
-      # Scenario 8: Force Catch for Y1 and Y2 only
-      fixed_catch_vec = rep(NA, n_years)
-      fixed_catch_vec[1:2] = catch_vec_author[1:2]
-    } else {
-      fixed_catch_vec = catch_vec_std
+      # indexing: 1:3 covers Model End Year, Year +1, and Year +2
+      current_fixed_catch = rep(NA, n_years)
+      current_fixed_catch[1:3] = catch_vec_author[1:3] 
     }
 
     # run sims
@@ -382,7 +382,7 @@ run_projections <- function(report, future_catch = NULL,
         catch_abc = sum(n_curr * (f_abc_val * sel_vec / Z_abc) * (1 - exp(-Z_abc)) * waa) * unit_conversion
         abc_out[y] = catch_abc
         
-        target_c = fixed_catch_vec[y]
+        target_c = current_fixed_catch[y]
         if (!is.na(target_c)) {
           expl_bio = sum(n_curr * waa * sel_vec) * unit_conversion
           f_val = if(target_c > expl_bio) 5.0 else
@@ -484,7 +484,7 @@ format_output <- function(projection_data, var = "ssb") {
     tidytable::left_join(scen_map, by = "scenario") %>%
     tidytable::summarise(mean_val = mean(.data[[var]]), .by = c(year, name)) %>%
     tidytable::pivot_wider(names_from = name, values_from = mean_val) %>%
-    tidytable::select(year, maxf, authf, half_maxf, avg5f, nof, overf, appoverf) %>%
+    tidytable::select(year, maxf, authf, avg5f, half_maxf, nof, overf, appoverf) %>%
     tidytable::mutate(tidytable::across(-year, ~ if(var == "f") round(.x, 4) else round(.x, 1)))
 }
 
