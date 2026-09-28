@@ -131,7 +131,7 @@ get_f_from_catch <- function(target_catch, n_at_age, m_at_age, sel_at_age, wt_at
   if(target_catch <= 0) return(0)
   res <- uniroot(calc_catch_diff, interval = c(1e-6, 2), tol = 1e-8)
     return(res$root)
- }
+}
 
 #' Single Year Population Projection Step
 #'
@@ -222,45 +222,22 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
   # calculate average (includes the new F for last year)
   F_avg = mean(c(hist_Fs, last_F))
 
-  f_out = 0
-
-  if (scenario == 1) {
-    # alt 1: Max ABC (F40)
-    f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
-
-  } else if (scenario == 2) {
-    # alt 2: Author ABC (Defaults to F40)
-    f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
-
-  } else if (scenario == 3) {
-    # alt 3: 5-Year Average
-    f_out = F_avg
-
-  } else if (scenario == 4) {
-    # alt 3: XX% Max F
-    f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40) * perc_max
-
-  } else if (scenario == 5) {
-    # alt 5: No Fishing
-    f_out = 0
-
-  } else if (scenario == 6) {
-    # alt 6: OFL (F35)
-    f_out = get_tier_f(ssb, f_ref = F35, b_ref = B35)
-
-  } else if (scenario == 7) {
-    # alt 7: Approaching Overfished
-    if (year_idx <= 3) {
-      f_out = get_tier_f(ssb, f_ref = F40, b_ref = B40)
-    } else {
-      f_out = get_tier_f(ssb, f_ref = F35, b_ref = B35)
-    }
-  } else if (scenario == 8) {
-    # Custom hybrid: Years 1 & 2 catch forced in run_projections
-    # Years 3+ use 5-year average F
-    f_out = F_avg
-  }
-  return(f_out)
+  f_out <- switch(as.character(scenario),
+    "1" = get_tier_f(ssb, f_ref = F40, b_ref = B40),                        # alt 1: Max ABC (F40)
+    "2" = get_tier_f(ssb, f_ref = F40, b_ref = B40),                        # alt 2: Author ABC (Defaults to F40)
+    "3" = F_avg,                                                            # alt 3: 5-Year Average
+    "4" = get_tier_f(ssb, f_ref = F40, b_ref = B40) * perc_max,             # alt 4: XX% Max F
+    "5" = 0,                                                                # alt 5: No Fishing
+    "6" = get_tier_f(ssb, f_ref = F35, b_ref = B35),                        # alt 6: OFL (F35)
+    "7" = if (year_idx <= 3) {                                              # alt 7: Approaching Overfished
+            get_tier_f(ssb, f_ref = F40, b_ref = B40) 
+          } else { 
+            get_tier_f(ssb, f_ref = F35, b_ref = B35) 
+          },
+    stop(paste("Invalid scenario:", scenario))                              # fallback
+  )
+  
+    return(f_out)
 }
 
 #' Run NPFMC Scenarios 1-7
@@ -279,14 +256,10 @@ get_scenario_f <- function(scenario, ssb, year_idx, report,
 #' @param rec_model the recruitment type: "Mean", "IG" (mean using Inverse Gaussian),
 #'                  "Ricker", or "BH" (Beverton-Holt).
 #' @param sigma_r_override optional numeric to override report$sigmaR.
-#' @param scenarios the NPFMC scenarios to run (1:8), the 8th is a new 5-year table
+#' @param scenarios the NPFMC scenarios to run (1:7)
 #' @param perc_max allow for a maximum percent of F to be used in scenario 4 - between 0-1
 #' @export
-run_projections <- function(report, future_catch = NULL,
-                            yield_ratio = NULL, n_sims = 1500,
-                            n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
-                            rec_model = "IG", sigma_r_override = NULL,
-                            scenarios = 1:8, perc_max, seed = 123) {
+run_projections <- function(report, future_catch = NULL, yield_ratio = NULL, n_sims = 1500, n_years = 14, unit_conversion = 1, sex_ratio = 0.5, rec_model = "IG", sigma_r_override = NULL, scenarios = 1:7, perc_max, seed = 123) {
 	set.seed(seed)
 
   # setup
@@ -353,12 +326,8 @@ run_projections <- function(report, future_catch = NULL,
         current_fixed_catch[2] = s1_means[2] * yield_ratio
         current_fixed_catch[3] = s1_means[3] * yield_ratio
       }
-    } else if (scen == 8) {
-      # indexing: 1:3 covers Model End Year, Year +1, and Year +2
-      current_fixed_catch = rep(NA, n_years)
-      current_fixed_catch[1:3] = catch_vec_author[1:3] 
     }
-
+    
     # run sims
     sims <- lapply(1:n_sims, function(id) {
       n_curr = n_start
@@ -437,14 +406,16 @@ run_projections <- function(report, future_catch = NULL,
 #' @export
 proj_5yr_table <- function(raw_proj, report, start_year) {
   
-  if (!8 %in% unique(raw_proj$scenario)) {
-    stop("Scenario 8 is missing. Ensure 'scenarios' includes 8 when running run_projections().")
-  }
-
   b100 = report$B0
+  years_1_2 = c(start_year + 1, start_year + 2)
+  years_3_5 = c(start_year + 3, start_year + 4, start_year + 5)
 
   proj_5yr <- raw_proj %>%
-    tidytable::filter(scenario == 8, year %in% (start_year + 1):(start_year + 5)) %>%
+    # filter for the correct scenarios and years
+    tidytable::filter(
+      (scenario == 2 & year %in% years_1_2) | 
+      (scenario == 3 & year %in% years_3_5)
+    ) %>%
     tidytable::summarise(
       `Expected Catch` = mean(catch),
       `OFL` = mean(ofl),
@@ -452,11 +423,11 @@ proj_5yr_table <- function(raw_proj, report, start_year) {
       `Mean SSB` = mean(ssb),
       .by = year
     ) %>%
+    tidytable::arrange(year) %>%
     tidytable::mutate(
       `Mean Relative Spawning Biomass` = `Mean SSB` / b100
     ) %>%
     tidytable::rename(Year = year) %>%
-    # Optional rounding to clean up the output formatting
     tidytable::mutate(
       `Expected Catch` = round(`Expected Catch`, 0),
       `OFL` = round(`OFL`, 0),
@@ -464,7 +435,7 @@ proj_5yr_table <- function(raw_proj, report, start_year) {
       `Mean SSB` = round(`Mean SSB`, 0),
       `Mean Relative Spawning Biomass` = round(`Mean Relative Spawning Biomass`, 3)
     )
-
+    
   return(proj_5yr)
 }
 
@@ -510,7 +481,7 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
     n_sims = 1000,
     n_years = 14,
     rec_model = "IG",
-    scenarios = 1:8,
+    scenarios = 1:7,
     perc_max = perc_max
   )
 
