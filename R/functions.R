@@ -92,9 +92,6 @@ get_recruitment <- function(ssb, b0, h, r0, r_mean = NULL, h_mean = NULL,
 #' @return the target Fishing Mortality (F)
 get_tier_f <- function(ssb, f_ref, b_ref, alpha = 0.05, ssl_protection = FALSE) {
 
-  # ratio of current biomass to reference (B40 or Bmsy)
-  ratio = ssb / b_ref
-
   if (ssl_protection) {
     # Steller Sea Lion specific rule (harder cutoff)
     if (ssb < 0.2 * b_ref) {
@@ -204,7 +201,7 @@ project_step <- function(n_at_age, m_at_age, sel_at_age,
 
 #' Scenario Logic
 get_scenario_f <- function(scenario, ssb, year_idx, report,
-                           current_F_sys = NULL, perc_max) {
+                           current_F_sys = NULL, perc_max = 0.5) {
   
   if(perc_max > 1.0) stop("'perc_max' must be between 0-1")
 
@@ -289,7 +286,7 @@ run_projections <- function(report, future_catch = NULL,
                             yield_ratio = NULL, n_sims = 1500,
                             n_years = 14, unit_conversion = 1, sex_ratio = 0.5,
                             rec_model = "IG", sigma_r_override = NULL,
-                            scenarios = 1:8, perc_max, seed = 54786) {
+                            scenarios = 1:8, perc_max, seed = 123) {
 	set.seed(seed)
 
   # setup
@@ -297,16 +294,17 @@ run_projections <- function(report, future_catch = NULL,
   n_ages = length(report$waa)
   last_yr = length(report$years)
   m_vec = rep(report$M, n_ages)
-  mat_vec = report$maa
-  wt_vec = report$waa
+  maa = report$maa
+  waa = report$waa
   n_start = report$Nat[, last_yr]
-  sel_vec = report$slx_fish[, last_yr] # flag!!! won't work with some assessments...
-  mat_wt_spawn_vec = sex_ratio * wt_vec * mat_vec * exp(-1 * m_vec * spawn_frac)
+  sel_vec = report$slx_fish[, last_yr] 
+  mat_wt_spawn_vec = sex_ratio * waa * maa * exp(-1 * m_vec * spawn_frac)
 
   year_out_template = report$years[last_yr] + (1:n_years) - 1
 
   # recruitment parameters (mean)
-  hist_rec_val = report$recruits[report$years %in% (1977 + report$ages[[1]]):(tail(report$years, 1) - report$ages[[1]])]
+  rec_age = report$ages[[1]]
+  hist_rec_val = report$recruits[report$years %in% (1977 + rec_age):(tail(report$years, 1) - rec_age)]
   a_mean = mean(hist_rec_val, na.rm = TRUE)
   h_mean = 1 / mean(1 / hist_rec_val, na.rm = TRUE)
 
@@ -316,7 +314,7 @@ run_projections <- function(report, future_catch = NULL,
     h_mean = h_mean,
     b0 = if(!is.null(report$B0)) report$B0 else NA,
     r0 = exp(report$log_mean_R),
-    h = if(!is.null(report$steepness)) report$steepness else 1.0, # Removed double comma
+    h = if(!is.null(report$steepness)) report$steepness else 1.0, 
     sigma_r = if(!is.null(sigma_r_override)) sigma_r_override else report$sigmaR,
     rho = if(!is.null(report$rho)) report$rho else 0
   )
@@ -356,10 +354,7 @@ run_projections <- function(report, future_catch = NULL,
     } else if (scen == 8) {
       # Scenario 8: Force Catch for Y1 and Y2 only
       fixed_catch_vec = rep(NA, n_years)
-      if (!is.null(future_catch)) {
-        len = min(length(future_catch), 2)
-        fixed_catch_vec[1:len] = catch_vec_author[1:len]
-      }
+      fixed_catch_vec[1:2] = catch_vec_author[1:2]
     } else {
       fixed_catch_vec = catch_vec_std
     }
@@ -373,39 +368,43 @@ run_projections <- function(report, future_catch = NULL,
       ssb_out = catch_out = rec_out = tot_bio_out = f_out = ofl_out = abc_out = numeric(n_years)
 
       for(y in 1:n_years) {
+        tot_curr <- sum(n_curr * waa) * unit_conversion
         ssb_curr = sum(n_curr * mat_wt_spawn_vec) * unit_conversion
 
         f_ofl_val = get_tier_f(ssb_curr, report$F35, report$B35)
         f_abc_val = get_tier_f(ssb_curr, report$F40, report$B40)
 
         Z_ofl = m_vec + f_ofl_val * sel_vec
-        catch_ofl = sum(n_curr * (f_ofl_val * sel_vec / Z_ofl) * (1 - exp(-Z_ofl)) * wt_vec) * unit_conversion
+        catch_ofl = sum(n_curr * (f_ofl_val * sel_vec / Z_ofl) * (1 - exp(-Z_ofl)) * waa) * unit_conversion
         ofl_out[y] = catch_ofl
 
         Z_abc = m_vec + f_abc_val * sel_vec
-        catch_abc = sum(n_curr * (f_abc_val * sel_vec / Z_abc) * (1 - exp(-Z_abc)) * wt_vec) * unit_conversion
+        catch_abc = sum(n_curr * (f_abc_val * sel_vec / Z_abc) * (1 - exp(-Z_abc)) * waa) * unit_conversion
         abc_out[y] = catch_abc
         
         target_c = fixed_catch_vec[y]
         if (!is.na(target_c)) {
-          expl_bio = sum(n_curr * wt_vec * sel_vec) * unit_conversion
+          expl_bio = sum(n_curr * waa * sel_vec) * unit_conversion
           f_val = if(target_c > expl_bio) 5.0 else
-            get_f_from_catch(target_c, n_curr, m_vec, sel_vec, wt_vec, unit_conversion)
+            get_f_from_catch(target_c, n_curr, m_vec, sel_vec, waa, unit_conversion)
         } else {
           f_val = get_scenario_f(scen, ssb_curr, y, report, current_F_sys = f_year_1, perc_max = perc_max)
         }
 
         if (y == 1) f_year_1 = f_val
 
-        step_res = project_step(n_curr, m_vec, sel_vec, wt_vec, mat_vec, f_val, rec_params, chi_curr, spawn_frac)
+        step_res = project_step(n_curr, m_vec, sel_vec, waa, maa, f_val, rec_params, chi_curr, spawn_frac)
 
-        n_curr = step_res$n_at_age
-        chi_curr = step_res$chi
+        
         ssb_out[y] = step_res$ssb * unit_conversion * sex_ratio
         catch_out[y] = step_res$catch_biomass * unit_conversion
-        tot_bio_out[y] = sum(n_curr * wt_vec) * unit_conversion 
+        tot_bio_out[y] = tot_curr 
         rec_out[y] = n_curr[1]
         f_out[y] = f_val
+
+        #advance to y+1
+        n_curr = step_res$n_at_age
+        chi_curr = step_res$chi
       }
       # closes the for loop and returns one simulation
       return(data.table::data.table(scenario = scen, sim_id = id, year = year_out_template,
@@ -442,7 +441,7 @@ proj_5yr_table <- function(raw_proj, report, start_year) {
     stop("Scenario 8 is missing. Ensure 'scenarios' includes 8 when running run_projections().")
   }
 
-  b100 <- report$B0
+  b100 = report$B0
 
   proj_5yr <- raw_proj %>%
     tidytable::filter(scenario == 8, year %in% (start_year + 1):(start_year + 5)) %>%
@@ -528,6 +527,7 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
   # pulling reference points directly from the report object
   y1 <- year + 1
   y2 <- year + 2
+  rec_age <- report$ages[[1]]
 
   # get year 1 and year 2 means for Scenario 1 (Max ABC) and Scenario 6 (OFL)
   summary_stats = raw_proj %>%
@@ -546,7 +546,7 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
     item = c(
       "M (natural mortality)",
       "Tier",
-      "Projected total biomass (t)",
+      paste0("Projected total (age ", rec_age, "+) biomass (t)"),
       "Projected female spawning biomass (t)",
       "B100%", "B40%", "B35%",
       "FOFL", "maxFABC", "FABC",
@@ -555,28 +555,28 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
     y1_val = c(
       report$M,
       ifelse(summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      summary_stats$tot_bio[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1],
+      summary_stats$tot_bio[summary_stats$year==y1 & summary_stats$scenario==2],
+      summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==2],
       report$B0, report$B40, report$B35,
       summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==6],
       summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==2],
+      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==1],
       summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==6],
       summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==2]
+      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==1]
     ),
     y2_val = c(
       report$M,
       ifelse(summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      summary_stats$tot_bio[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1],
+      summary_stats$tot_bio[summary_stats$year==y2 & summary_stats$scenario==2],
+      summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==2],
       report$B0, report$B40, report$B35,
       summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==6],
       summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==2],
+      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==1],
       summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==6],
       summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==2]
+      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==1]
     )
   )
 
