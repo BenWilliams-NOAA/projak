@@ -76,7 +76,11 @@ rpt <- list(
   yield_ratio = 0.94
 )
 
+# rpt is the output of RTMButils or the above format
+# year is the 1st year of estimated catch (e.g., this year we estmate catch through the remainder of the season)
 # future catch is the projected catch in the current year
+# yield ratio is the amount of TAC caught (in this case over the last 3 years)
+# output_dir is the folder that you want the results in, best to use something like here::here(2026, "proj")
 proj_rtmb(rpt, year=2026, 
           future_catch = 1170.036, 
           yield_ratio = rpt$yield_ratio, 

@@ -16,7 +16,7 @@ run_projections(
   sigma_r_override = NULL,
   scenarios = 1:8,
   perc_max,
-  seed = 54786
+  seed = 123
 )
 }
 \arguments{
@@ -33,8 +33,10 @@ Scenario 1 Catch * yield_ratio.}
 \item{n_years}{number of projection years}
 
 \item{unit_conversion}{Scaling factor to align Biomass units with Catch units.
-- If Nat=Millions, Waa=Grams, Catch=Tons -> Use 1.0
-- If Nat=Thousands, Waa=Grams, Catch=Tons -> Use 0.001}
+\itemize{
+\item If Nat=Millions, Waa=Grams, Catch=Tons -> Use 1.0
+\item If Nat=Thousands, Waa=Grams, Catch=Tons -> Use 0.001
+}}
 
 \item{sex_ratio}{proportion of females for SSB calculation (default 0.5)}
 

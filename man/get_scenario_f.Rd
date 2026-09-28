@@ -4,7 +4,14 @@
 \alias{get_scenario_f}
 \title{Scenario Logic}
 \usage{
-get_scenario_f(scenario, ssb, year_idx, report, current_F_sys = NULL, perc_max)
+get_scenario_f(
+  scenario,
+  ssb,
+  year_idx,
+  report,
+  current_F_sys = NULL,
+  perc_max = 0.5
+)
 }
 \description{
 Scenario Logic
