@@ -581,7 +581,7 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
       # Catch and limits from the Author F trajectory
       round(s2_y1$ofl_limit), 
       round(s2_y1$abc_limit), 
-      round(s2_y1$expected_catch), # Uses actual expected catch for "ABC (t)"
+      round(s2_y1$abc_limit), # Uses actual expected catch for "ABC (t)"
       
       year, NA, NA, NA
     ),
@@ -598,7 +598,7 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
       
       round(s2_y2$ofl_limit),
       round(s2_y2$abc_limit),
-      round(s2_y2$expected_catch), 
+      round(s2_y2$abc_limit), 
       
       year + 1, NA, NA, NA
     )
