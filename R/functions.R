@@ -447,6 +447,7 @@ proj_5yr_table <- function(raw_proj, report, start_year) {
 
   proj_5yr <- raw_proj %>%
     # filter for the correct scenarios and years
+    # author F scenario (years 1-2) and 5-yr average F scenario (years 3-5)
     tidytable::filter(
       (scenario == 2 & year %in% years_1_2) | 
       (scenario == 3 & year %in% years_3_5)
@@ -540,11 +541,17 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
     tidytable::filter(year %in% c(y1, y2)) %>%
     tidytable::summarise(
       ssb = mean(ssb),
-      abc = mean(catch),
-      tot_bio = mean(tot_bio),
-      f   = mean(f),
-      .by = c(year, scenario)
-    )
+    expected_catch = mean(catch), 
+    ofl_limit = mean(ofl),        
+    abc_limit = mean(abc),        
+    tot_bio = mean(tot_bio),
+    f_act = mean(f),              
+    .by = c(year, scenario)
+  )
+  # extract scenario 2 (author F). 
+  # matches the ADMB script using the "author_f" bigsum output
+  s2_y1 <- tidytable::filter(summary_stats, year == y1, scenario == 2)
+  s2_y2 <-  tidytable::filter(summary_stats, year == y2, scenario == 2)
 
   # xtract specific rows for the table
   # scenario 1 = Max ABC/F40, scenario 6 = OFL/F35
@@ -556,38 +563,57 @@ proj_rtmb <- function(report, year, future_catch, yield_ratio,
       "Projected female spawning biomass (t)",
       "B100%", "B40%", "B35%",
       "FOFL", "maxFABC", "FABC",
-      "OFL (t)", "maxABC (t)", "ABC (t)"
+      "OFL (t)", "maxABC (t)", "ABC (t)",
+      "Status", "Overfishing", "Overfished", "Approaching overfished"
     ),
     y1_val = c(
       report$M,
-      ifelse(summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      summary_stats$tot_bio[summary_stats$year==y1 & summary_stats$scenario==2],
-      summary_stats$ssb[summary_stats$year==y1 & summary_stats$scenario==2],
-      report$B0, report$B40, report$B35,
-      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==6],
-      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$f[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==6],
-      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y1 & summary_stats$scenario==1]
+      ifelse(s2_y1$ssb > report$B40, "3a", "3b"),
+      round(s2_y1$tot_bio),
+      round(s2_y1$ssb),
+      round(report$B0), round(report$B40), round(report$B35),
+      
+      # F rates evaluated dynamically based on Scen 2 SSB to match tier rules
+      round(get_tier_f(s2_y1$ssb, report$F35, report$B35), 3), 
+      round(get_tier_f(s2_y1$ssb, report$F40, report$B40), 3),
+      round(s2_y1$f_act, 3), 
+      
+      # Catch and limits from the Author F trajectory
+      round(s2_y1$ofl_limit), 
+      round(s2_y1$abc_limit), 
+      round(s2_y1$expected_catch), # Uses actual expected catch for "ABC (t)"
+      
+      year, NA, NA, NA
     ),
     y2_val = c(
       report$M,
-      ifelse(summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==1] > report$B40, "3a", "3b"),
-      summary_stats$tot_bio[summary_stats$year==y2 & summary_stats$scenario==2],
-      summary_stats$ssb[summary_stats$year==y2 & summary_stats$scenario==2],
-      report$B0, report$B40, report$B35,
-      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==6],
-      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$f[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==6],
-      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==1],
-      summary_stats$abc[summary_stats$year==y2 & summary_stats$scenario==1]
+      ifelse(s2_y2$ssb > report$B40, "3a", "3b"),
+      round(s2_y2$tot_bio),
+      round(s2_y2$ssb),
+      round(report$B0), round(report$B40), round(report$B35),
+      
+      round(get_tier_f(s2_y2$ssb, report$F35, report$B35), 3),
+      round(get_tier_f(s2_y2$ssb, report$F40, report$B40), 3),
+      round(s2_y2$f_act, 3),
+      
+      round(s2_y2$ofl_limit),
+      round(s2_y2$abc_limit),
+      round(s2_y2$expected_catch), 
+      
+      year + 1, NA, NA, NA
     )
   )
 
   # formatting
   colnames(exec_df) = c("item", as.character(y1), as.character(y2))
+  # if old exec table exists, join it 
+  if(file.exists(file.path("base", "processed", "exec_summ.csv"))) {
+    old_exec <- vroom::vroom(file.path("base", "processed", "exec_summ.csv")) %>%
+      tidytable::select(item, y1 = 2, y2 = 3) 
+    
+    exec_df <- old_exec %>% 
+      tidytable::left_join(exec_df, by = "item")
+  }
   vroom::vroom_write(exec_df, file.path(output_dir, "exec_summ.csv"), ",")
 
   table_5yr <- proj_5yr_table(raw_proj, report, start_year = year)
